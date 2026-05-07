@@ -1,0 +1,14 @@
+django
+psycopg2-binary>=2.9
+sqlalchemy
+python-multipart
+pyjwt
+asyncpg
+passlib[bcrypt]
+redis
+celery
+bcrypt==4.0.1
+httpx
+jinja2
+alembic
+python-dotenv
