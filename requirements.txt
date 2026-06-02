@@ -12,3 +12,5 @@ httpx
 jinja2
 alembic
 python-dotenv
+django-extensions
+djangorestframework

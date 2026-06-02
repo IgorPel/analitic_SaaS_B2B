@@ -42,6 +42,7 @@ class Category(models.Model):
                                null=True,
                                blank=True,
                                related_name='children')
+
     company = models.ForeignKey(Company, related_name="categories", on_delete=models.CASCADE)
 
     def __str__(self):
@@ -53,7 +54,7 @@ class Category(models.Model):
 
 class Product(models.Model):
     name = models.CharField(max_length=100)
-    sku = models.CharField(max_length=100, index=True)
+    sku = models.CharField(max_length=100, db_index=True)
     category = models.ManyToManyField(Category, related_name="products")
     store = models.ForeignKey(Store, related_name="products", on_delete=models.CASCADE)
     current_price = models.DecimalField(max_digits=12, decimal_places=2)
@@ -82,6 +83,7 @@ class Order(TimeStampedModel,
             models.Model):
     customer = models.ForeignKey(Customer, related_name="orders", on_delete=models.CASCADE)
     store = models.ForeignKey(Store, related_name="orders", on_delete=models.CASCADE)
+    total_price = models.DecimalField(max_digits=12, decimal_places=2)
 
     def __str__(self):
         return f'{self.customer.name} - {self.store.name}'
@@ -101,11 +103,10 @@ class Order(TimeStampedModel,
         default=Status.COMPLETED
     )
     #created_at = models.DateTimeField(auto_now_add=True)
-    total_price = models.DecimalField(max_digits=12, decimal_places=2)
 
 
 class OrderItem(models.Model):
-    product = models.ForeignKey(Product, related_name="order_items", on_delete=models.protected)
+    product = models.ForeignKey(Product, related_name="order_items", on_delete=models.PROTECT)
     order = models.ForeignKey(Order, related_name="items", on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()
     price_at_purchase = models.DecimalField(max_digits=12, decimal_places=2)
@@ -113,8 +114,7 @@ class OrderItem(models.Model):
     def __str__(self):
         return f'{self.order.name} - {self.product.name}'
 
-class PriceHistory(TimeStampedModel,
-                   models.Model):
+class PriceHistory(models.Model):
     product = models.ForeignKey(Product, related_name="price_history", on_delete=models.CASCADE)
     price = models.DecimalField(max_digits=12, decimal_places=2)
     changed_at = models.DateTimeField(auto_now=None)
