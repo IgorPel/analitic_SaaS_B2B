@@ -53,9 +53,12 @@ services:
 
   worker:
     build: .
+    working_dir: /app                          
     container_name: analytics_worker
     restart: always
-    command: celery -A src.core worker --loglevel=info
+    command: celery -A src.core worker -l info 
+    environment:
+      - PYTHONPATH=/app/src                    
     depends_on:
       - redis
       - db

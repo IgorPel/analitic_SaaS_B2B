@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.sites',
-    'src.analytics',
+    'src.analytics.apps.AnalyticsConfig',
     'django_extensions',
     'rest_framework',
 ]
@@ -120,8 +120,8 @@ USE_I18N = True
 
 USE_TZ = True
 # settings.py
-CELERY_BROKER_URL = 'redis://redis:6379/0' # Адреса Redis в Docker
-CELERY_RESULT_BACKEND = 'redis://redis:6379/0' # Де зберігати статус задач
+CELERY_BROKER_URL = 'redis://redis:6379/0' 
+CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/

@@ -4,8 +4,9 @@ from django.utils.translation import gettext_lazy as _
 from django_extensions.db.models import TimeStampedModel
 
 
-class Company(TimeStampedModel,
-              models.Model):
+# Create your models here.
+
+class Company(TimeStampedModel):
     id = models.UUIDField(primary_key=True,
                           default=uuid.uuid4,
                           editable=False)
@@ -17,8 +18,7 @@ class Company(TimeStampedModel,
         return self.name
 
     name = models.CharField(max_length=100)
-    #created_at = models.DateTimeField(auto_now_add=True)
-
+ 
 
 class Store(models.Model):
     id = models.UUIDField(primary_key=True,
@@ -67,8 +67,7 @@ class Product(models.Model):
 
 
 
-class Customer(TimeStampedModel,
-               models.Model):
+class Customer(TimeStampedModel):
     def __str__(self):
         return self.email
 
@@ -79,11 +78,13 @@ class Customer(TimeStampedModel,
     email = models.EmailField()
     company = models.ForeignKey(Company, related_name="customers", on_delete=models.CASCADE)
 
-class Order(TimeStampedModel,
-            models.Model):
+class Order(TimeStampedModel):
+    order_id = models.CharField(max_length=255, db_index=True)
     customer = models.ForeignKey(Customer, related_name="orders", on_delete=models.CASCADE)
     store = models.ForeignKey(Store, related_name="orders", on_delete=models.CASCADE)
     total_price = models.DecimalField(max_digits=12, decimal_places=2)
+    order_date = models.DateTimeField()
+
 
     def __str__(self):
         return f'{self.customer.name} - {self.store.name}'
@@ -91,6 +92,12 @@ class Order(TimeStampedModel,
     class Meta:
         verbose_name = _('Order')
         verbose_name_plural = _('Orders')
+        constraints = [
+            models.UniqueConstraint(
+                fields=['store', 'order_id'], 
+                name='unique_order_per_store'
+            )
+        ]
 
     class Status(models.TextChoices):
         COMPLETED = 'CM', _('Completed')
@@ -102,8 +109,7 @@ class Order(TimeStampedModel,
         choices=Status.choices,
         default=Status.COMPLETED
     )
-    #created_at = models.DateTimeField(auto_now_add=True)
-
+   
 
 class OrderItem(models.Model):
     product = models.ForeignKey(Product, related_name="order_items", on_delete=models.PROTECT)
@@ -127,4 +133,17 @@ class PriceHistory(models.Model):
         verbose_name_plural = _('PriceHistory')
 
 
-# Create your models here.
+class ImportIssue(TimeStampedModel):
+    company = models.ForeignKey(Company, related_name="import_issues", on_delete=models.CASCADE)
+    task_id = models.CharField(max_length=255, db_index=True)
+    type = models.CharField(max_length=50)
+    description = models.TextField()
+    row_number = models.PositiveIntegerField(null=True, blank=True)
+
+    def __str__(self):
+        return f"[{self.issue_type}] {self.company.name} - Task: {self.task_id}"
+
+    class Meta:
+        verbose_name = _('ImportIssue')
+        verbose_name_plural = _('ImportIssues')
+
