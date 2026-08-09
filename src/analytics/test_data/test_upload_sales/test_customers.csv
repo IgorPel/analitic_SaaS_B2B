@@ -1,0 +1,5 @@
+order_id,customer_email,product_sku,quantity,price,order_date,status
+ORD-001,client0@test.com,SKU-1001,2,1000.00,2023-11-01,COMPLETED
+ORD-001,client0@test.com,SKU-1002,1,50.00,2023-11-01,COMPLETED
+ORD-002,client1@test.com,SKU-1001,1,1000.00,2023-11-02,COMPLETED
+ORD-003,client2@test.com,SKU-1001,1,1000.00,2023-11-02,CANCELED

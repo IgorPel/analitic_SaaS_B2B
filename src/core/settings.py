@@ -29,6 +29,17 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+CACHE = {
+    "default": {
+        "BACKEND": 'django.core.cache.backends.redis.RedisCache',
+        "LOCATION": 'redis://redis:6379/0',
+        "OPTIONS": {
+            "CLIENT_CLASS": 'django_redis.client.DefaultClient',
+            "IGNORE_EXCEPTIONS": True,
+        }
+    }
+}
+
 
 # Application definition
 
@@ -132,3 +143,10 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+import sys
+
+if 'test' in sys.argv:
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True

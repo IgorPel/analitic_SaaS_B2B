@@ -4,12 +4,34 @@ from django.test import TestCase
 
 import csv
 import io
+import os
 from django.urls import reverse
 from rest_framework.test import APITestCase
 from django.test import override_settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from .models import Company, Customer, ImportIssue, Order, OrderItem, Store, Category, Product, PriceHistory
+from django.utils import timezone
+from datetime import timedelta, time, datetime, timezone
+from .analytic_func import *
 
+
+
+
+def upload_data(self, url, path, store=None):
+    if not store:
+        store = self.store
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(current_dir, path) 
+            
+    with open(file_path, 'rb') as csv_file:
+        response = self.client.post(url, {
+            'file': csv_file,
+            'store_id': store.id,
+            'company_id': self.company.id
+        }, format='multipart')
+    
+    return response
 
 
 # Create your tests here.
@@ -17,35 +39,20 @@ from .models import Company, Customer, ImportIssue, Order, OrderItem, Store, Cat
 class CatalogUploadIntegrationTest(APITestCase):
 
     def setUp(self):
-        
         self.company = Company.objects.create(name="Test Company")
-        self.store = Store.objects.create(name="Test Store", company=self.company)
-
-       
+        self.store = Store.objects.create(name="Test Store", company=self.company)      
         self.upload_url = reverse('store-data-upload')
 
     def test_api_upload_creates_categories_and_products(self):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(current_dir, 'test_data', 'test_upload_catalog.csv') 
         
-        csv_content = io.StringIO()
-        writer = csv.writer(csv_content)
-        writer.writerow(['product_sku', 'product_name', 'category_path', 'price'])
-       
-        writer.writerow(['SKU-1001', 'iPhone 15', 'Техніка > Електроніка > Смартфони', '1000.00'])
-        
-        writer.writerow(['SKU-1002', 'Чохол', 'Техніка > Аксесуари', '50.00'])
-
-       
-        csv_file = SimpleUploadedFile(
-            "test_catalog.csv",
-            csv_content.getvalue().encode('utf-8'),
-            content_type="text/csv"
-        )
-
-        response = self.client.post(self.upload_url, {
-            'file': csv_file,
-            'store_id': self.store.id,
-            'company_id': self.company.id
-        }, format='multipart')
+        with open(file_path, 'rb') as csv_file:
+            response = self.client.post(self.upload_url, {
+                'file': csv_file,
+                'store_id': self.store.id,
+                'company_id': self.company.id
+            }, format='multipart')
 
         self.assertEqual(response.status_code, 202, response.data)
 
@@ -98,65 +105,18 @@ class SalesUploadIntegrationTest(APITestCase):
         self.upload_url = reverse('sales-data-upload')
 
     def test_sales_api_customers(self):
-        csv_content = io.StringIO()
-        writer = csv.writer(csv_content)
-        writer.writerow(['order_id', 'customer_email', 'product_sku', 'quantity', 'price', 'order_date', 'status'])
-        writer.writerow(['ORD-001', 'client0@test.com', 'SKU-1001', '2', '1000.00', '2023-11-01', 'COMPLETED'])
-        writer.writerow(['ORD-001', 'client0@test.com', 'SKU-1002', '1', '50.00', '2023-11-01', 'COMPLETED'])
-        writer.writerow(['ORD-002', 'client1@test.com', 'SKU-1001', '1', '1000.00', '2023-11-02', 'CANCELED'])
-
-        csv_file = SimpleUploadedFile(
-            "test_sales.csv",
-            csv_content.getvalue().encode('utf-8'),
-            content_type="text/csv"
-        )
-
-        response = self.client.post(self.upload_url, {
-            'file': csv_file,
-            'store_id': self.store.id,
-            'company_id': self.company.id
-        }, format='multipart')
-
-        
+        response = upload_data(self, self.upload_url, 'test_data/test_upload_sales/test_customers.csv')
         self.assertEqual(response.status_code, 202) 
-        self.assertEqual(Customer.objects.count(), 2)
+        self.assertEqual(Customer.objects.count(), 3)
         self.assertTrue(Customer.objects.filter(email='client0@test.com').exists())
         self.assertTrue(Customer.objects.filter(email='client1@test.com').exists())
+        self.assertTrue(Customer.objects.filter(email='client2@test.com').exists())
+        
         
 
     def test_sales_api_products(self):
-        csv_content = io.StringIO()
-        writer = csv.writer(csv_content)
-        writer.writerow(['order_id', 'customer_email', 'product_sku', 'quantity', 'price', 'order_date', 'status'])
-            
-       
-        writer.writerow(['ORD-001', 'client0@test.com', 'SKU-1001', '2', '1000.00', '2023-11-01', 'COMPLETED'])
-            
-       
-        writer.writerow(['ORD-001', 'client0@test.com', 'SKU-1002', '1', '50.00', '2023-11-01', 'COMPLETED'])
 
-        writer.writerow(['ORD-002', 'client1@test.com', 'SKU-1001', '1', '1000.00', '2023-11-02', 'CANCELED'])
-
-        writer.writerow(['ORD-002', 'client1@test.com', 'SKU-1003', '1', '100.00', '2023-11-02', 'CANCELED'])
-
-        writer.writerow(['ORD-003', 'client2@test.com', 'SKU-1001', '1', '1000.00', '2023-11-02', 'CANCELED'])
-        
-        writer.writerow(['ORD-004', 'client1@test.com', 'SKU-1001', '1', '900.00', '2023-11-02', 'CANCELED'])
-        
-
-        csv_file = SimpleUploadedFile(
-            "test_sales.csv",
-            csv_content.getvalue().encode('utf-8'),
-            content_type="text/csv"
-        )
-
-       
-        response = self.client.post(self.upload_url, {
-            'file': csv_file,
-            'store_id': self.store.id,
-            'company_id': self.company.id
-        }, format='multipart')
-
+        response = upload_data(self, self.upload_url, 'test_data/test_upload_sales/test_product.csv')
         self.assertEqual(response.status_code, 202) 
         self.assertEqual(Product.objects.count(), 3)
         self.assertEqual(ImportIssue.objects.count(), 1)
@@ -167,38 +127,8 @@ class SalesUploadIntegrationTest(APITestCase):
         
     
     def test_sales_api_orders(self):
-        csv_content = io.StringIO()
-        writer = csv.writer(csv_content)
-        writer.writerow(['order_id', 'customer_email', 'product_sku', 'quantity', 'price', 'order_date', 'status'])
-            
-        writer.writerow(['ORD-001', 'client0@test.com', 'SKU-1001', '2', '100.00', '2023-11-01', 'COMPLETED'])
-        writer.writerow(['ORD-001', 'client1@test.com', 'SKU-1001', '2', '100.00', '2023-11-01', 'COMPLETED'])
-        writer.writerow(['ORD-002', 'client1@test.com', 'SKU-1002', '1', '100.00', '2023-11-01', 'COMPLETED'])
-        writer.writerow(['ORD-002', 'client1@test.com', 'SKU-1001', '3', '10.00',  '2023-11-01', 'COMPLETED'])
-        writer.writerow(['ORD-002', 'client1@test.com', 'SKU-1001', '1', '150.00', '2023-11-01', 'COMPLETED'])
-        writer.writerow(['ORD-003', 'client1@test.com', 'SKU-1002', '1', '100.00', '2023-11-01', 'COMPLETED'])
-        writer.writerow(['ORD-004', 'client1@test.com', 'SKU-1002', '1', '100.00', '2023-11-01', 'CANCELED'])
-        writer.writerow(['ORD-005', 'client1@test.com', 'SKU-1002', '1', '100.00', '2023-11-01', 'RETURNED'])
-        
-        writer.writerow(['ORD-006', 'client0@test.com', 'SKU-1001', '2', '100.00', '2023-11-01', 'COMPLETED'])
-        writer.writerow(['ORD-006', 'client0@test.com', 'SKU-1001', '2', '100.00', '2024-11-01', 'COMPLETED'])
-        
-        writer.writerow(['ORD-007', 'client0@test.com', 'SKU-1001', '2', '100.00', '2023-11-01', 'COMPLETED'])
-        writer.writerow(['ORD-007', 'client0@test.com', 'SKU-1001', '2', '100.00', '2023-11-01', 'CANCELED'])
-       
 
-        csv_file = SimpleUploadedFile(
-            "test_sales.csv",
-            csv_content.getvalue().encode('utf-8'),
-            content_type="text/csv"
-        )
-        
-        response = self.client.post(self.upload_url, {
-            'file': csv_file,
-            'store_id': self.store.id,
-            'company_id': self.company.id
-        }, format='multipart')
-
+        response = upload_data(self, self.upload_url, 'test_data/test_upload_sales/test_orders.csv')
 
         self.assertEqual(response.status_code, 202)
         self.assertEqual(Order.objects.count(), 7)
@@ -220,3 +150,288 @@ class SalesUploadIntegrationTest(APITestCase):
         status_issue = ImportIssue.objects.filter(type='STATUS_MISMATCH').first()
         self.assertEqual(status_issue.description, 'Order ORD-007 have different status.')
         self.assertEqual(status_issue.row_number, 12)
+
+
+class AnalyticsFuncTest(TestCase):
+    
+    def setUp(self):
+        self.company = Company.objects.create(name="TestCompany")
+        self.store = Store.objects.create(company=self.company, name="TestStore0")
+        self.upload_url_catalog = reverse('store-data-upload')
+        self.upload_url_sales = reverse('sales-data-upload')
+
+
+    def test_formulating_revenue(self):
+        response = upload_data(self, self.upload_url_catalog, 'test_data/test_analytics/catalogs/catalog_revenue.csv')
+        self.assertEqual(response.status_code, 202)
+        
+        response = upload_data(self, self.upload_url_sales, 'test_data/test_analytics/func/test_revenue.csv')
+        self.assertEqual(response.status_code, 202)
+
+        rev = Revenue(store_id=[self.store.id])
+        rev.func()
+        #breakpoint()
+        result = rev.formulating()
+        print(f'\n\n\n\nRevenue list {result}\n\n\n\n')
+
+    def test_formulating_ltv(self):
+        response = upload_data(self, self.upload_url_catalog, 'test_data/test_analytics/catalogs/catalog_ltv.csv')
+        self.assertEqual(response.status_code, 202)
+        
+        
+        response = upload_data(self, self.upload_url_sales, 'test_data/test_analytics/func/test_ltv.csv')
+        self.assertEqual(response.status_code, 202)
+
+        rev = LTV(store_id=[self.store.id])
+        rev.func()
+        #breakpoint()
+        result = rev.formulating()
+        print(f'\n\n\n\nLTV list: {result}\n\n\n\n')
+                
+
+    def test_revenue(self):
+
+        response = upload_data(self, self.upload_url_catalog, 'test_data/test_analytics/catalogs/catalog_revenue.csv')
+        self.assertEqual(response.status_code, 202)
+
+
+        response = upload_data(self, self.upload_url_sales, 'test_data/test_analytics/func/test_revenue.csv')
+        self.assertEqual(response.status_code, 202)
+
+        rev = Revenue(store_id=[self.store.id])
+        result = rev.func()
+        #print(f'Revenue: {result}')
+        #result = rev.formulating()
+
+        self.assertEqual(result.count(), 7)
+        self.assertEqual(result.get(days=datetime(2026,7,13, tzinfo=timezone.utc)).get('revenue'), Decimal('300'))
+        self.assertEqual(result.get(days=datetime(2026,7,14, tzinfo=timezone.utc)).get('revenue'), Decimal('200'))
+        self.assertEqual(result.get(days=datetime(2026,7,15, tzinfo=timezone.utc)).get('revenue'), Decimal('100'))
+        self.assertNotIn(datetime(2026,7,16, tzinfo=timezone.utc), result)
+        self.assertNotIn(datetime(2026,7,17, tzinfo=timezone.utc), result)
+        self.assertEqual(result.get(days=datetime(2026,7,18, tzinfo=timezone.utc)).get('revenue'), Decimal('200'))
+        self.assertEqual(result.get(days=datetime(2026,7,19, tzinfo=timezone.utc)).get('revenue'), Decimal('300'))
+        self.assertEqual(result.get(days=datetime(2026,7,20, tzinfo=timezone.utc)).get('revenue'), Decimal('300'))
+        self.assertEqual(result.get(days=datetime(2026,7,21, tzinfo=timezone.utc)).get('revenue'), Decimal('600'))
+    
+
+    def test_ltv(self):
+
+        response = upload_data(self, self.upload_url_catalog, 'test_data/test_analytics/catalogs/catalog_ltv.csv')
+        self.assertEqual(response.status_code, 202)
+
+        response = upload_data(self, self.upload_url_sales, 'test_data/test_analytics/func/test_ltv.csv')
+        self.assertEqual(response.status_code, 202)
+
+        ltv = LTV(stores_id=[self.store.id])
+        result = ltv.func()
+        #print(f'LTV: {result}')
+        #result = ltv.formulating()
+        
+        self.assertEqual(result.count(), 13)
+        customer = result.filter(customer=Customer.objects.get(email='customer0@test.com'))
+        self.assertEqual(customer.count(), 3)
+        revenues = [cust['cumulative_revenue'] for cust in customer]
+        self.assertEqual(revenues[0], Decimal('100'))
+        self.assertEqual(revenues[1], Decimal('200'))
+        self.assertEqual(revenues[2], Decimal('300'))
+
+
+        customer = result.filter(customer=Customer.objects.get(email='customer1@test.com'))
+        self.assertEqual(customer.count(), 3)
+        revenues = [cust['cumulative_revenue'] for cust in customer]
+        self.assertEqual(revenues[0], Decimal('100'))
+        self.assertEqual(revenues[1], Decimal('300'))
+        self.assertEqual(revenues[2], Decimal('600'))
+
+        customer = result.filter(customer=Customer.objects.get(email='customer2@test.com'))
+        self.assertEqual(customer.count(), 2)
+        revenues = [cust['cumulative_revenue'] for cust in customer]
+        self.assertEqual(revenues[0], Decimal('100'))
+        self.assertEqual(revenues[1], Decimal('200'))
+
+        customer = result.filter(customer=Customer.objects.get(email='customer3@test.com'))
+        self.assertEqual(customer.count(), 0)
+
+        customer = result.filter(customer=Customer.objects.get(email='customer4@test.com'))
+        self.assertEqual(customer.count(), 2)
+        revenues = [cust['cumulative_revenue'] for cust in customer]
+        self.assertEqual(revenues[0], Decimal('100'))
+        self.assertEqual(revenues[1], Decimal('200'))
+        
+        customer = result.filter(customer=Customer.objects.get(email='customer5@test.com'))
+        self.assertEqual(customer.count(), 3)
+        revenues = [cust['cumulative_revenue'] for cust in customer]
+        self.assertEqual(revenues[0], Decimal('300'))
+        self.assertEqual(revenues[1], Decimal('400'))
+        self.assertEqual(revenues[2], Decimal('500'))
+
+        
+
+
+    def test_analyze_sales(self):
+
+        response = upload_data(self, self.upload_url_catalog, 'test_data/test_analytics/catalogs/catalog_analyze_sales.csv')
+        self.assertEqual(response.status_code, 202)
+
+
+        response = upload_data(self, self.upload_url_sales, 'test_data/test_analytics/func/test_analyze_sales.csv')
+        self.assertEqual(response.status_code, 202)
+        
+        #product = analyze_sales(self.store.id, Product.objects.get(sku='SKU-000').id)
+        Analyzer = AnalyzeSales(stores_id=[self.store.id])
+        product = Analyzer.func(products_id=(Product.objects.get(sku='SKU-000').id,))
+        print(f'\n\n\nProductAnalyzer: {product}\n\n\n')
+        self.assertEqual(product.count(), 3)
+        products = [prod for prod in product]
+
+        self.assertEqual(products[2]['price_at_purchase'], Decimal('100.00'))
+        self.assertEqual(products[2]['total_units_sold'], 6)
+        self.assertEqual(products[2]['total_orders'], 3)
+
+        self.assertEqual(products[1]['price_at_purchase'], Decimal('200.00'))
+        self.assertEqual(products[1]['total_units_sold'], 3)
+        self.assertEqual(products[1]['total_orders'], 2)
+
+        self.assertEqual(products[0]['price_at_purchase'], Decimal('300.00'))
+        self.assertEqual(products[0]['total_units_sold'], 1)
+        self.assertEqual(products[0]['total_orders'], 1)
+
+        #product = analyze_sales(self.store.id, Product.objects.get(sku='SKU-001').id)
+        product = Analyzer.func(products_id=(Product.objects.get(sku='SKU-001').id,))
+        self.assertEqual(product.count(), 3)
+        products = [prod for prod in product]
+
+        self.assertEqual(products[2]['price_at_purchase'], Decimal('100.00'))
+        self.assertEqual(products[2]['total_units_sold'], 7)
+        self.assertEqual(products[2]['total_orders'], 4) 
+
+        self.assertEqual(products[1]['price_at_purchase'], Decimal('150.00'))
+        self.assertEqual(products[1]['total_units_sold'], 7) #3+2+1+1
+        self.assertEqual(products[1]['total_orders'], 4)
+
+        self.assertEqual(products[0]['price_at_purchase'], Decimal('200.00'))
+        self.assertEqual(products[0]['total_units_sold'], 7)
+        self.assertEqual(products[0]['total_orders'], 4)
+
+
+
+
+        #product = analyze_sales(self.store.id, Product.objects.get(sku='SKU-002').id)
+        product = Analyzer.func(products_id=(Product.objects.get(sku='SKU-002').id,))
+        self.assertEqual(product.count(), 3)
+        products = [prod for prod in product]
+
+        self.assertEqual(products[2]['price_at_purchase'], Decimal('100.00'))
+        self.assertEqual(products[2]['total_units_sold'], 7)
+        self.assertEqual(products[2]['total_orders'], 3)
+
+        self.assertEqual(products[1]['price_at_purchase'], Decimal('150.00'))
+        self.assertEqual(products[1]['total_units_sold'], 7)
+        self.assertEqual(products[1]['total_orders'], 3)
+
+        self.assertEqual(products[0]['price_at_purchase'], Decimal('200.00'))
+        self.assertEqual(products[0]['total_units_sold'], 7)
+        self.assertEqual(products[0]['total_orders'], 3)
+
+
+
+
+        #product = analyze_sales(self.store.id, Product.objects.get(sku='SKU-003').id)
+        product = Analyzer.func(products_id=(Product.objects.get(sku='SKU-003').id,))
+        self.assertEqual(product.count(), 4)
+        products = [prod for prod in product]
+
+        self.assertEqual(products[3]['price_at_purchase'], Decimal('100.00'))
+        self.assertEqual(products[3]['total_units_sold'], 5)
+        self.assertEqual(products[3]['total_orders'], 2)
+
+        self.assertEqual(products[2]['price_at_purchase'], Decimal('150.00'))
+        self.assertEqual(products[2]['total_units_sold'], 5)
+        self.assertEqual(products[2]['total_orders'], 2)
+
+        self.assertEqual(products[1]['price_at_purchase'], Decimal('200.00'))
+        self.assertEqual(products[1]['total_units_sold'], 5)
+        self.assertEqual(products[1]['total_orders'], 2)
+
+        self.assertEqual(products[0]['price_at_purchase'], Decimal('250.00'))
+        self.assertEqual(products[0]['total_units_sold'], 5)
+        self.assertEqual(products[0]['total_orders'], 2)
+
+
+
+        #product = analyze_sales(self.store.id, Product.objects.get(sku='SKU-004').id)
+        product = Analyzer.func(products_id=(Product.objects.get(sku='SKU-004').id,))
+        self.assertEqual(product.count(), 0)
+
+
+        products = Analyzer.func(products_id=(Product.objects.get(sku='SKU-002').id,
+                                              Product.objects.get(sku='SKU-003').id,
+                                              Product.objects.get(sku='SKU-004').id))
+        products = Analyzer.formulating()
+        print(f"\n\n\nProducts: {products}\n\n\n")
+        
+        
+
+
+
+    def test_cohort_analyze(self):
+
+        response = upload_data(self, self.upload_url_catalog, 'test_data/test_analytics/catalogs/catalog_cohort_0.csv')
+        self.assertEqual(response.status_code, 202)
+
+
+        response = upload_data(self, self.upload_url_sales, 'test_data/test_analytics/func/test_cohort_0.csv')
+        self.assertEqual(response.status_code, 202)
+        
+        another_store = Store.objects.create(company=self.company, name="TestStore1")
+
+        response = upload_data(self, self.upload_url_catalog, 'test_data/test_analytics/catalogs/catalog_cohort_1.csv', store=another_store)
+        self.assertEqual(response.status_code, 202)
+
+
+        response = upload_data(self, self.upload_url_sales, 'test_data/test_analytics/func/test_cohort_1.csv', store=another_store)
+        self.assertEqual(response.status_code, 202)
+
+        CohortAnalyzer = CohortAnalyze(stores_id=[self.store.id])
+        CohortAnalyzer.func()
+        res = CohortAnalyzer.formulating()
+
+        self.assertEqual(len(res), 4)
+        self.assertEqual(res[0]['cohort'], 'Nov 2025')
+        self.assertEqual(res[0]['cohort_size'], 10)
+        self.assertEqual(res[0]['retention'], [100.0, 80.0, 50.0, 20.0])
+
+        self.assertEqual(res[1]['cohort'], 'Mar 2026')
+        self.assertEqual(res[1]['cohort_size'], 3)
+        self.assertEqual(res[1]['retention'], [100.0, 100.0])
+
+        self.assertEqual(res[2]['cohort'], 'Apr 2026')
+        self.assertEqual(res[2]['cohort_size'], 1)
+        self.assertEqual(res[2]['retention'], [100.0])
+
+        self.assertEqual(res[3]['cohort'], 'Jun 2026')
+        self.assertEqual(res[3]['cohort_size'], 1)
+        self.assertEqual(res[3]['retention'], [100.0, 100.00])
+        
+        
+
+        
+
+
+        
+
+        
+        
+
+        
+
+
+
+        
+
+        
+        
+        
+        
+        

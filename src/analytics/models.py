@@ -2,6 +2,7 @@ from django.db import models
 import uuid
 from django.utils.translation import gettext_lazy as _
 from django_extensions.db.models import TimeStampedModel
+from django.utils import timezone
 
 
 # Create your models here.
@@ -78,7 +79,21 @@ class Customer(TimeStampedModel):
     email = models.EmailField()
     company = models.ForeignKey(Company, related_name="customers", on_delete=models.CASCADE)
 
+
+class OrderQuerySet(models.QuerySet):
+    def within_dates(self, start_date=None, end_date=None):
+        if end_date is None:
+            end_date = timezone.now()
+        
+        qs = self.filter(order_date__lte=end_date)
+
+        if start_date is not None:
+            qs = qs.filter(order_date__gte=start_date)
+        
+        return qs
+
 class Order(TimeStampedModel):
+    objects = OrderQuerySet.as_manager()
     order_id = models.CharField(max_length=255, db_index=True)
     customer = models.ForeignKey(Customer, related_name="orders", on_delete=models.CASCADE)
     store = models.ForeignKey(Store, related_name="orders", on_delete=models.CASCADE)
@@ -87,7 +102,7 @@ class Order(TimeStampedModel):
 
 
     def __str__(self):
-        return f'{self.customer.name} - {self.store.name}'
+        return self.order_id
 
     class Meta:
         verbose_name = _('Order')
@@ -111,7 +126,24 @@ class Order(TimeStampedModel):
     )
    
 
+
+class OrderItemQuerySet(models.QuerySet):
+    def within_dates(self, start_date=None, end_date=None):
+        if end_date is None:
+            end_date = timezone.now()
+        
+        qs = self.filter(order__order_date__lte=end_date)
+
+        if start_date is not None:
+            qs = qs.filter(order__order_date__gte=start_date)
+        
+        return qs
+
+
+
 class OrderItem(models.Model):
+    objects = OrderItemQuerySet.as_manager()
+
     product = models.ForeignKey(Product, related_name="order_items", on_delete=models.PROTECT)
     order = models.ForeignKey(Order, related_name="items", on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()

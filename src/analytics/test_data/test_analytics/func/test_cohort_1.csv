@@ -1,0 +1,9 @@
+order_id,customer_email,product_sku,quantity,price,order_date,status
+ORD-100,customer0@test.com,SKU-100,1,100.00,2025-11-01,COMPLETED
+ORD-101,customer1@test.com,SKU-100,1,100.00,2025-11-02,COMPLETED
+ORD-102,customer2@test.com,SKU-100,1,100.00,2025-11-03,COMPLETED
+ORD-103,customer3@test.com,SKU-100,1,100.00,2025-11-04,COMPLETED
+ORD-104,customer4@test.com,SKU-100,1,100.00,2025-11-05,COMPLETED
+ORD-105,customer5@test.com,SKU-100,1,100.00,2025-11-06,COMPLETED
+ORD-106,customer7@test.com,SKU-100,1,100.00,2025-11-07,COMPLETED
+ORD-107,customer6@test.com,SKU-100,1,100.00,2025-11-08,COMPLETED
