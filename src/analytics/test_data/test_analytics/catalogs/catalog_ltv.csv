@@ -1,3 +1,11 @@
 product_sku,product_name,category_path,price
-SKU-000,test_product_0,Test_Category,0
-SKU-001,test_product_1,Test_Category,0
+SKU-1000,test_product_0,Test_Category_0,661.54
+SKU-1001,test_product_1,Test_Category_0,832.77
+SKU-1002,test_product_2,Test_Category_1,1374.18
+SKU-1003,test_product_3,Test_Category_1,1140.09
+SKU-1004,test_product_4,Test_Category_2,1648.05
+SKU-1005,test_product_5,Test_Category_2,385.51
+SKU-1006,test_product_6,Test_Category_3,1057.14
+SKU-1007,test_product_7,Test_Category_3,104.23
+SKU-1008,test_product_8,Test_Category_4,870.79
+SKU-1009,test_product_9,Test_Category_4,1321.55
