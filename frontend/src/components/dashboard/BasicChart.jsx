@@ -229,7 +229,8 @@ export default function BasicChart({
           height: currentHeight,
           position: 'relative',
           overflowY: chart.type === 'Table' ? 'auto' : 'hidden',
-          overflowX: 'auto',
+          overflowX: 'hidden',
+          scrollbarWidth: 'thin',
           transition: isDragging ? 'none' : 'height 0.2s ease',
         }}
       >
