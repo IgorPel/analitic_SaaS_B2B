@@ -415,7 +415,6 @@ export default function WidgetBuilderPage({ onSaveWidget }) {
       }
 
       const result = await response.json();
-      console.log('Збережено в dashboard_preferences:', result);
 
       if (onSaveWidget) onSaveWidget(finalWidget);
       navigate('/');

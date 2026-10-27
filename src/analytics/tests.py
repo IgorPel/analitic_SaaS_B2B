@@ -268,8 +268,6 @@ class AnalyticsFuncTest(APITestCase):
 
         result = ltv.func()
         res = ltv.formulating()
-        for row in res:
-            print(row)
 
     def est_ltv(self):
 

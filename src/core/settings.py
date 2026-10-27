@@ -13,10 +13,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
-CACHE = {
+CACHES = {
     "default": {
         "BACKEND": 'django.core.cache.backends.redis.RedisCache',
-        "LOCATION": os.environ.get("CACHE", 'redis://redis:6379/0'),
+        "LOCATION": os.environ.get("CACHES", 'redis://redis:6379/1'),
     }
 }
 

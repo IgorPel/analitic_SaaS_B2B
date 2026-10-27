@@ -49,7 +49,7 @@ def DefaultValueRight(key_fill, data, target_key, **kwargs):
 
 
 def quick_print(message):
-    print(message, flush=True)
+    pass
 
 class BasicAnalytics(ABC):
 
@@ -74,72 +74,22 @@ class BasicAnalytics(ABC):
         return str(value)
 
     def _pre_values(self):
-        quick_print("VALUES")
-        self.status_print("Before")
         if self.fields:
             base_fields = self.possible_fields()
             for field in self.fields:
                 if field not in base_fields:
-                    print("ERROR FIELD", flush=True)
                     return
             self._result = self._result.values(*self.fields)
         else:
             self._result = self._result.values(*self._pre_standart_values)
-        self.status_print("After")
 
 
     def _post_listed_result(self):
-        quick_print(f'List Result:|{self.__class__}|')
-        if self.__class__ == "src.analytics.analytic_func.LTV":
-            for it in self._result:
-                quick_print(list(it))
-            quick_print("Parametrs: ")
-            quick_print(self.__dict__)
         self._listed_result = list(self._result.values(*self._post_standart_values)) if self._result is not None else None
 
 
     def status_print(self, message: str = ""):
-
-        if self.__class__.__name__ != 'LTV':
-            return
-
-        quick_print("=" * 60)
-        quick_print(f"[STATUS DEBUG] {message} (Class: {self.__class__.__name__})")
-        quick_print("=" * 60)
-
-
-        quick_print("--- Parameters ---")
-        clean_params = {
-            k: v for k, v in self.__dict__.items()
-            if k not in ('_result', '_listed_result')
-        }
-        for param, val in clean_params.items():
-            quick_print(f"  {param}: {val}")
-
-
-        if self._result is not None:
-            quick_print("\n--- Result (_result) ---")
-            try:
-
-                if hasattr(self._result, 'first'):
-                    sample = self._result.first()
-                elif isinstance(self._result, (list, tuple)) and self._result:
-                    sample = self._result[0]
-                else:
-                    sample = None
-
-                quick_print(f"  Type: {type(self._result)}")
-                quick_print(f"  Sample row: {sample}")
-            except Exception as e:
-                quick_print(f"  Error reading _result: {e}")
-
-
-        if self._listed_result is not None:
-            quick_print(f"\n--- Listed Result (_listed_result: {len(self._listed_result)} items) ---")
-            for item in self._listed_result:
-                quick_print(f"  {item}")
-
-        quick_print("=" * 60 + "\n")
+        pass
 
     def _run_methods_by_prefix(self, prefix: str):
         methods = self._pre_pipeline if prefix == '_pre_' else self._post_pipeline
@@ -150,8 +100,6 @@ class BasicAnalytics(ABC):
 
 
     def __init__(self, **kwards):
-
-        quick_print(f'Initializing {self.__class__.__name__} with parameters: {kwards}')
         self.stores = kwards.pop('stores_id', None)
         self.statuses = kwards.pop('statuses', None)
         self.start_date = kwards.pop('start_date', None)
@@ -352,7 +300,6 @@ class BasicAnalytics(ABC):
             base_fields = self.possible_fields()
             for field in self.orders_by:
                 if field not in base_fields:
-                    print("ERROR FIELD", flush=True)
                     return
             self._result = self._result.order_by(*self.orders_by)
         elif hasattr(self, '_standart_order'):
@@ -403,8 +350,7 @@ class BasicAnalytics(ABC):
         self._result = self._result.filter(**{f"{main_group_field}__in": top_ids})
 
     def print_structured_result_list(self):
-        for row in self._listed_result:
-            print(row)
+        pass
 
 
     @classmethod
@@ -472,9 +418,6 @@ class LTV(BasicAnalytics):
 
 
     def _pre_unique_dates(self):
-        quick_print("Uniques Dates")
-        self.status_print("Before")
-
         if self._extra_params.get('unique_dates', False):
             self._result = self._result.annotate(
                 days=TruncDay('order_date')
@@ -488,7 +431,6 @@ class LTV(BasicAnalytics):
                 **self._format_map,
                 'revenue': ('total_prices', lambda x: float(x))
             }
-        self.status_print("After")
 
 
     @BasicAnalytics.modificator_decorater
@@ -542,7 +484,6 @@ class AnalyzeSales(BasicAnalytics):
     def func(self, **kwards) -> QuerySet:
         products = kwards.get('products_id')
         if not products:
-            print(f'!!! parametr product_id is None')
             return None
         self._result = self._result.filter(product__in=products)
         self._result = self._result.values(

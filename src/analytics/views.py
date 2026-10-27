@@ -34,8 +34,6 @@ def fetch_with_cache(AnalyticClass : BasicAnalytics, prefix, **kwargs):
 
     som = AnalyticClass(**kwargs)
     som.func()
-    print(f'Prefix - {prefix}', flush=True)
-    print(f'Parametrs {kwargs}', flush=True)
 
     db_result = som.formulating(**kwargs)
 

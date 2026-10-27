@@ -32,7 +32,6 @@ export default function RegisterPage() {
 
     try {
       await register(formData);
-      console.log("WORK - 1")
       navigate('/');
     } catch (err) {
 
