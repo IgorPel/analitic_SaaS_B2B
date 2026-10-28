@@ -170,7 +170,7 @@ class ImportIssueSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ImportIssue
-        fields = ['task_id', 'row_number', 'issue_type', 'description']
+        fields = ['task_id', 'row_number', 'type', 'description']
 
     def get_issues(self, obj):
         result = []
