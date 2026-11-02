@@ -16,6 +16,7 @@ from .analytic_func import *
 from django.core.cache import cache
 from django.contrib.auth.models import User
 from .serializers import ImportIssueSerializer
+from django.db.models import Min as DjangoMin, Max as DjangoMax
 
 
 class RegisterView(generics.CreateAPIView):
@@ -260,6 +261,38 @@ class DashboardPreferencesAPIView(APIView):
             {"status": "deleted", "id": str(target_id), "data": company.dashboard_preferences},
             status=status.HTTP_200_OK
         )
+
+
+class DataRangeAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company = request.user.companies.first()
+        if not company:
+            return Response({"min_date": None, "max_date": None})
+
+        queryset = Order.objects.filter(store__company=company)
+
+        store_ids = []
+        for raw in request.query_params.getlist('stores_id'):
+            try:
+                store_ids.append(uuid.UUID(str(raw)))
+            except ValueError:
+                return Response(
+                    {"error": f"Некоректний ID магазину: {raw}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        if store_ids:
+            queryset = queryset.filter(store_id__in=store_ids)
+
+        statuses = request.query_params.getlist('statuses')
+        queryset = queryset.filter(status__in=statuses) if statuses else queryset.filter(status=Order.Status.COMPLETED)
+
+        bounds = queryset.aggregate(min_date=DjangoMin('order_date'), max_date=DjangoMax('order_date'))
+        return Response({
+            "min_date": bounds['min_date'].date().isoformat() if bounds['min_date'] else None,
+            "max_date": bounds['max_date'].date().isoformat() if bounds['max_date'] else None,
+        })
 
 
 class UserProfileAPIView(APIView):

@@ -2,7 +2,7 @@ from django.urls import path
 from .views import StoreDataUploadView, SalesDataUploadView, cheack_task_status
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import RegisterView
-from .views import LTVChartAPIView, RevenueChartAPIView, AnalyzeSalesAPIView, GeneralStatsAPIView, TopProducts, TopCategories, DashboardPreferencesAPIView, UserProfileAPIView, TaskIssuesAPIView
+from .views import LTVChartAPIView, RevenueChartAPIView, AnalyzeSalesAPIView, GeneralStatsAPIView, TopProducts, TopCategories, DashboardPreferencesAPIView, UserProfileAPIView, TaskIssuesAPIView, DataRangeAPIView
 
 
 urlpatterns = [
@@ -21,5 +21,6 @@ urlpatterns = [
     path('top-categories/', TopCategories.as_view(), name='top-categories'),
     path('dashboard-preferences/', DashboardPreferencesAPIView.as_view(), name='dashboard-preferences'),
     path('dashboard-preferences/<str:widget_id>/', DashboardPreferencesAPIView.as_view(), name='dashboard-preferences-detail'),
-    path('task-issues/', TaskIssuesAPIView.as_view(), name='task-issues')
+    path('task-issues/', TaskIssuesAPIView.as_view(), name='task-issues'),
+    path('data-range/', DataRangeAPIView.as_view(), name='data-range'),
 ]

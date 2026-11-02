@@ -11,7 +11,7 @@ def get_default_dashboard_preferences():
         {
             "id": str(uuid.uuid4()),
             "func": "revenue",
-            "para": {"date_range": "last_30_days"},
+            "para": {"date_range": "latest_30_days"},
             "char": {
                 'type': "line",
                 'x_axis': "date",
@@ -43,7 +43,7 @@ def get_default_dashboard_preferences():
         {
             "id": str(uuid.uuid4()),
             "func": "top_categories",
-            "para": {"date_range": "last_30_days",
+            "para": {"date_range": "latest_30_days",
                      "limits": 5},
             "chart": {
                 'type': "pie",

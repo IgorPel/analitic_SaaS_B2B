@@ -1,31 +1,14 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../../api/axios';
 import BasicChart from './BasicChart';
+import { resolveDateRange } from './dateRange';
 
-const parseDateRange = (rangeType) => {
-  let start = new Date(2026, 6, 1);
-  let end = new Date(2026, 6, 8);
-
-  if (rangeType && typeof rangeType === 'object') {
-    start = new Date(rangeType.start);
-    end = new Date(rangeType.end);
-  } else if (rangeType === 'last_30_days') {
-    start.setDate(end.getDate() - 30);
-  } else if (rangeType === 'last_7_days') {
-    start.setDate(end.getDate() - 7);
-  }
-
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-    return {
-      start_date: '2026-07-01',
-      end_date: '2026-07-08',
-    };
-  }
-
-  return {
-    start_date: '2026-07-01',
-    end_date: '2026-07-08',
-  };
+const formatPeriod = (range) => {
+  if (!range) return null;
+  const fmt = (iso) => iso.split('-').reverse().join('.');
+  return range.start_date === range.end_date
+    ? fmt(range.start_date)
+    : `${fmt(range.start_date)} – ${fmt(range.end_date)}`;
 };
 
 export default function DashboardWidget({
@@ -54,56 +37,74 @@ export default function DashboardWidget({
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(Boolean(endpoint));
   const [error, setError] = useState(null);
+  const [period, setPeriod] = useState(null);
 
   const isFullWidth = Boolean(widget.fullWidth);
   const effectiveHeight = widget.customHeight || baseHeight;
 
+  const requestKey = JSON.stringify({ para: widget.para || {}, stores: widget.stores || [] });
+
   useEffect(() => {
+    if (!endpoint) return undefined;
+    let cancelled = false;
+
     const fetchData = async () => {
       setLoading(true);
+      setError(null);
       try {
-        const dateParams = parseDateRange(widget.para?.date_range);
+        const { para, stores } = JSON.parse(requestKey);
+        const range = await resolveDateRange(para, stores);
+        if (cancelled) return;
+
+        if (!range) {
+          setPeriod(null);
+          setData([]);
+          return;
+        }
+        setPeriod(range);
+
         const params = new URLSearchParams();
+        params.append('start_date', range.start_date);
+        params.append('end_date', range.end_date);
 
-        if (dateParams.start_date) params.append('start_date', dateParams.start_date);
-        if (dateParams.end_date) params.append('end_date', dateParams.end_date);
+        stores.forEach((id) => params.append('stores_id', id));
 
-        if (widget.stores && widget.stores.length > 0) {
-          widget.stores.forEach((id) => {
-            params.append('stores_id', id);
-          });
+        if (para.group_and_limit) {
+          params.append('group_and_limit', JSON.stringify(para.group_and_limit));
         }
 
-        if (widget.para && widget.para.group_and_limit) {
-          params.append('group_and_limit', JSON.stringify(widget.para.group_and_limit));
+        if (para.fill_blank) {
+          const fillBlank = { ...para.fill_blank };
+          if (fillBlank.method === 'AtoZ' && fillBlank.data_type === 'date') {
+            fillBlank.start = range.start_date;
+            fillBlank.end = range.end_date;
+          }
+          params.append('fill_blank', JSON.stringify(fillBlank));
         }
 
-        if (widget.para && widget.para.fill_blank) {
-          params.append('fill_blank', JSON.stringify(widget.para.fill_blank));
+        if (para.unique_dates) {
+          params.append('unique_dates', JSON.stringify(para.unique_dates));
         }
 
-        if (widget.para && widget.para.unique_dates) {
-          params.append('unique_dates', JSON.stringify(widget.para.unique_dates));
-        }
-
-        if (widget.para && widget.para.graphs) {
-          params.append('graphs', JSON.stringify(widget.para.graphs));
+        if (para.graphs) {
+          params.append('graphs', JSON.stringify(para.graphs));
         }
 
         const response = await apiClient.get(endpoint, { params });
-        setData(response.data.data || response.data || []);
+        if (!cancelled) setData(response.data.data || response.data || []);
       } catch (err) {
         console.error(err);
-        setError('Помилка завантаження даних');
+        if (!cancelled) setError('Помилка завантаження даних');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    if (endpoint) {
-      fetchData();
-    }
-  }, [widget, endpoint]);
+    fetchData();
+    return () => {
+      cancelled = true;
+    };
+  }, [requestKey, endpoint]);
 
   const wrapperStyle = {
     gridColumn: isFullWidth ? '1 / -1' : 'span 1',
@@ -209,6 +210,7 @@ export default function DashboardWidget({
         data={data}
         chart={widget.chart}
         func={anal_func}
+        subtitle={formatPeriod(period)}
         chartHeight={effectiveHeight}
         isFullWidth={isFullWidth}
         onToggleFullWidth={

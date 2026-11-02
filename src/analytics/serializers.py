@@ -5,7 +5,7 @@ from django.db import transaction
 
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 class FileUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
@@ -92,10 +92,15 @@ class AnalyticsSerializer(serializers.Serializer):
         end_date = data.get('end_date')
 
         if not start_date and not end_date:
-            data['end_date'] = timezone.now().date()
-            data['start_date'] = data['end_date'] - timedelta(days=30)
+            end_date = timezone.now().date()
+            start_date = end_date - timedelta(days=30)
         elif start_date and end_date and start_date > end_date:
             raise serializers.ValidationError("Start date cannot be greater than end date.")
+
+        if start_date:
+            data['start_date'] = timezone.make_aware(datetime.combine(start_date, time.min))
+        if end_date:
+            data['end_date'] = timezone.make_aware(datetime.combine(end_date, time.max))
 
         return data
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BasicChart from './BasicChart';
+import { DATE_RANGE_OPTIONS } from './dateRange';
 import { useMemo } from 'react';
 
 const WIDGET_TEMPLATES = {
@@ -174,7 +175,7 @@ export default function WidgetBuilderPage({ onSaveWidget }) {
 
   const [metric, setMetric] = useState('revenue');
   const [chartType, setChartType] = useState(WIDGET_TEMPLATES['revenue'].defaultChart);
-  const [dateRange, setDateRange] = useState('last_30_days');
+  const [dateRange, setDateRange] = useState('latest_30_days');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
@@ -772,10 +773,9 @@ export default function WidgetBuilderPage({ onSaveWidget }) {
               onChange={(e) => setDateRange(e.target.value)}
               style={{ width: '100%', padding: '0.5rem', marginTop: '0.5rem' }}
             >
-              <option value="last_7_days">Останні 7 днів</option>
-              <option value="last_30_days">Останні 30 днів</option>
-              <option value="all_time">За весь час</option>
-              <option value="custom">Свій період...</option>
+              {DATE_RANGE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
             </select>
           </label>
 

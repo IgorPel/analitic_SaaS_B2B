@@ -9,6 +9,7 @@ export default function BasicChart({
   data,
   chart,
   func,
+  subtitle,
   onDelete,
   chartHeight = 320,
   isFullWidth = false,
@@ -101,9 +102,14 @@ export default function BasicChart({
           flexWrap: 'wrap',
         }}
       >
-        <h3 style={{ margin: 0, color: '#374151', fontSize: '1.1rem', fontWeight: 600 }}>
-          {func}
-        </h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <h3 style={{ margin: 0, color: '#374151', fontSize: '1.1rem', fontWeight: 600 }}>
+            {func}
+          </h3>
+          {subtitle && (
+            <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{subtitle}</span>
+          )}
+        </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
 
