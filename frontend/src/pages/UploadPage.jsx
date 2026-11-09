@@ -1,98 +1,104 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import { clearDataRangeCache } from '../components/dashboard/dateRange';
+
+const POLL_INTERVAL_MS = 2000;
+const TERMINAL_STATUSES = ['SUCCESS', 'FAILURE'];
+
+async function fetchTaskIssues(taskId) {
+  try {
+    const response = await apiClient.get('/task-issues/', {
+      params: { tasks_id: taskId },
+    });
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (err) {
+    console.error('Не вдалося завантажити лог помилок:', err);
+    return [];
+  }
+}
 
 export default function UploadPage({type}) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   const [file, setFile] = useState(null);
-  const [store, setStore] = useState('');
+  const [store, setStore] = useState(null);
   const [taskId, setTaskId] = useState(null);
 
   const [status, setStatus] = useState('IDLE');
-  const [progress, setProgress] = useState(0);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [stores, setStores] = useState([]);
-  const [issues, setIssues] = useState([]);
+  const [uploadError, setUploadError] = useState('');
   const url = type === 'sales' ? '/upload-sales-data/' : '/upload-store-data/';
 
-  useEffect(() => {
-    if (user?.stores) {
-      setStores(user.stores);
-      if (user.stores.length > 0 && !store) {
-        setStore(user.stores[0].name);
+  const { data: profile } = useQuery({
+    queryKey: ['userProfile'],
+    queryFn: () => apiClient.get('/auth/me/').then((res) => res.data),
+    enabled: !user?.stores,
+  });
+
+  const stores = user?.stores || profile?.stores || [];
+  const currentStore = store ?? stores[0]?.name ?? '';
+
+  const taskQuery = useQuery({
+    queryKey: ['taskStatus', taskId],
+    queryFn: async () => {
+      const response = await apiClient.get(`/check-status/${taskId}/`);
+      const taskData = response.data;
+
+      if (taskData.status === 'SUCCESS') {
+        const issues = await fetchTaskIssues(taskId);
+        clearDataRangeCache();
+        queryClient.invalidateQueries({ queryKey: ['analytics'] });
+        return { ...taskData, issues };
       }
-    } else {
-      apiClient.get('/auth/me/')
-        .then((res) => {
-          const fetchedStores = res.data.stores || [];
-          setStores(fetchedStores);
-          if (fetchedStores.length > 0 && !store) {
-            setStore(fetchedStores[0].name);
-          }
-        })
-        .catch((err) => console.error("Помилка завантаження магазинів:", err));
-    }
-  }, [user]);
+      return taskData;
+    },
+    enabled: Boolean(taskId) && status === 'PROCESSING',
+    refetchInterval: (query) =>
+      TERMINAL_STATUSES.includes(query.state.data?.status) ? false : POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
+    gcTime: 0,
+  });
 
-  useEffect(() => {
-    if (!taskId || status !== 'PROCESSING') return;
+  const taskStatus = taskQuery.data?.status;
 
-    const interval = setInterval(async () => {
-      try {
-        const response = await apiClient.get(`/check-status/${taskId}/`);
-        const taskData = response.data;
+  let effectiveStatus = status;
+  if (status === 'PROCESSING') {
+    if (taskStatus === 'SUCCESS') effectiveStatus = 'SUCCESS';
+    else if (taskStatus === 'FAILURE') effectiveStatus = 'ERROR';
+  }
 
-        if (taskData.status === 'SUCCESS') {
-          setStatus('SUCCESS');
-          setProgress(100);
-          clearInterval(interval);
+  const progress =
+    effectiveStatus === 'SUCCESS'
+      ? 100
+      : Math.min(15 + taskQuery.dataUpdateCount * 15, 90);
 
-          try {
+  const errorMessage =
+    status === 'PROCESSING' && taskStatus === 'FAILURE'
+      ? taskQuery.data?.result || 'Помилка обробки файлу на сервері'
+      : uploadError;
 
-             const issuesResponse = await apiClient.get('/task-issues/', {
-                 params: { tasks_id: taskId }
-             });
-
-             if (issuesResponse.data && issuesResponse.data.length > 0) {
-                 setIssues(issuesResponse.data);
-             }
-          } catch (err) {
-             console.error("Не вдалося завантажити лог помилок:", err);
-          }
-
-        } else if (taskData.status === 'FAILURE') {
-          setStatus('ERROR');
-          setErrorMessage(taskData.result || 'Помилка обробки файлу на сервері');
-          clearInterval(interval);
-        } else {
-
-          setProgress((prev) => (prev < 90 ? prev + 15 : prev));
-        }
-      } catch (err) {
-        console.error('Помилка перевірки статусу таски:', err);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [taskId, status]);
+  const issues = taskQuery.data?.issues || [];
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
+      setTaskId(null);
       setStatus('IDLE');
-      setProgress(0);
-      setErrorMessage('');
+      setUploadError('');
     }
   };
 
   const handleUpload = async () => {
-    if (!file || !store) return;
+    if (!file || !currentStore) return;
 
     setStatus('UPLOADING');
+    setUploadError('');
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('store_name', store);
+    formData.append('store_name', currentStore);
 
     try {
 
@@ -103,12 +109,11 @@ export default function UploadPage({type}) {
       if (response.data.task_id) {
         setTaskId(response.data.task_id);
         setStatus('PROCESSING');
-        setProgress(15);
       }
     } catch (err) {
       console.error(err);
       setStatus('ERROR');
-      setErrorMessage(
+      setUploadError(
         err.response?.data?.file?.[0] ||
         err.response?.data?.store_id?.[0] ||
         'Помилка завантаження файлу'
@@ -128,9 +133,9 @@ export default function UploadPage({type}) {
           type="text"
           list="store-options"
           placeholder="Введіть назву або оберіть зі списку"
-          value={store || ''}
+          value={currentStore}
           onChange={(e) => setStore(e.target.value)}
-          disabled={status === 'UPLOADING' || status === 'PROCESSING'}
+          disabled={effectiveStatus === 'UPLOADING' || effectiveStatus === 'PROCESSING'}
           style={{
             width: '100%',
             padding: '0.6rem',
@@ -155,13 +160,13 @@ export default function UploadPage({type}) {
           type="file"
           accept=".csv"
           onChange={handleFileChange}
-          disabled={status === 'UPLOADING' || status === 'PROCESSING'}
+          disabled={effectiveStatus === 'UPLOADING' || effectiveStatus === 'PROCESSING'}
         />
       </div>
 
       <button
         onClick={handleUpload}
-        disabled={!file || !store || status === 'UPLOADING' || status === 'PROCESSING'}
+        disabled={!file || !currentStore || effectiveStatus === 'UPLOADING' || effectiveStatus === 'PROCESSING'}
         style={{
           padding: '0.6rem 1.2rem',
           cursor: 'pointer',
@@ -172,10 +177,10 @@ export default function UploadPage({type}) {
           fontWeight: 'bold',
         }}
       >
-        {status === 'UPLOADING' ? 'Відправка...' : 'Завантажити CSV'}
+        {effectiveStatus === 'UPLOADING' ? 'Відправка...' : 'Завантажити CSV'}
       </button>
 
-      {status === 'PROCESSING' && (
+      {effectiveStatus === 'PROCESSING' && (
         <div style={{ marginTop: '1.5rem' }}>
           <p>Обробка в базі даних Celery... {progress}%</p>
           <div style={{ width: '100%', background: '#eee', height: '20px', borderRadius: '4px' }}>
@@ -192,7 +197,7 @@ export default function UploadPage({type}) {
         </div>
       )}
 
-      {status === 'SUCCESS' && (
+      {effectiveStatus === 'SUCCESS' && (
         <div style={{ marginTop: '1.5rem' }}>
           <p style={{ color: 'green', fontWeight: 'bold', marginBottom: '1rem' }}>
             ✅ Файл успішно оброблено! Дані готові для аналітики.
@@ -234,7 +239,7 @@ export default function UploadPage({type}) {
         </div>
       )}
 
-      {status === 'ERROR' && (
+      {effectiveStatus === 'ERROR' && (
         <p style={{ color: 'red', marginTop: '1.5rem', fontWeight: 'bold' }}>
           ❌ {errorMessage}
         </p>

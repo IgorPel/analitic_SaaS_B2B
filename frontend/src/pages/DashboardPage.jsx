@@ -1,13 +1,28 @@
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/axios';
 import { Link } from 'react-router-dom';
 import DashboardWidget from '../components/dashboard/DashboardWidget';
 
 const STORAGE_KEY = 'dashboard_scale_settings_v1';
+const PREFERENCES_KEY = ['dashboardPreferences'];
+
+async function fetchPreferences() {
+  try {
+    const response = await apiClient.get('/dashboard-preferences/');
+    const data = response.data;
+
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.json_data)) return data.json_data;
+    return [];
+  } catch (error) {
+    console.error('Помилка завантаження налаштувань:', error);
+    return [];
+  }
+}
 
 export default function DashboardPage() {
-  const [preferences, setPreferences] = useState([]);
-  const [isPrefsLoaded, setIsPrefsLoaded] = useState(false);
+  const queryClient = useQueryClient();
 
   const [gridMode, setGridMode] = useState(() => {
     try {
@@ -57,56 +72,56 @@ export default function DashboardPage() {
     }
   }, [gridMode, zoom, baseHeight]);
 
-  useEffect(() => {
-    const fetchPreferences = async () => {
-      try {
-        const response = await apiClient.get('/dashboard-preferences/');
-        const data = response.data;
+  const { data: preferences = [], isLoading: isPrefsLoading } = useQuery({
+    queryKey: PREFERENCES_KEY,
+    queryFn: fetchPreferences,
+  });
 
-        if (Array.isArray(data)) {
-          setPreferences(data);
-        } else if (data && data.json_data && Array.isArray(data.json_data)) {
-          setPreferences(data.json_data);
-        } else {
-          setPreferences([]);
-        }
-      } catch (error) {
-        console.error('Помилка завантаження налаштувань:', error);
-        setPreferences([]);
-      } finally {
-        setIsPrefsLoaded(true);
-      }
-    };
+  const savePreferencesMutation = useMutation({
+    mutationFn: (updatedList) => apiClient.patch('/dashboard-preferences/', updatedList),
+    onMutate: async (updatedList) => {
+      await queryClient.cancelQueries({ queryKey: PREFERENCES_KEY });
+      const previous = queryClient.getQueryData(PREFERENCES_KEY);
+      queryClient.setQueryData(PREFERENCES_KEY, updatedList);
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      console.error('Не вдалося зберегти розмір віджета на сервері:', err);
+      if (context?.previous) queryClient.setQueryData(PREFERENCES_KEY, context.previous);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PREFERENCES_KEY });
+    },
+  });
 
-    fetchPreferences();
-  }, []);
+  const deleteWidgetMutation = useMutation({
+    mutationFn: (widgetId) => apiClient.delete(`/dashboard-preferences/${widgetId}/`),
+    onSuccess: (_res, widgetId) => {
+      queryClient.setQueryData(PREFERENCES_KEY, (prev = []) =>
+        prev.filter((w) => String(w.id) !== String(widgetId))
+      );
+      queryClient.invalidateQueries({ queryKey: PREFERENCES_KEY });
+    },
+    onError: (error) => {
+      console.error('Помилка видалення віджета:', error);
+      alert('Не вдалося видалити віджет. Спробуйте пізніше.');
+    },
+  });
 
-  const handleDeleteWidget = async (widgetId) => {
+  const handleDeleteWidget = (widgetId) => {
     if (!widgetId) return;
 
     const isConfirmed = window.confirm('Ви впевнені, що хочете видалити цей віджет?');
     if (!isConfirmed) return;
 
-    try {
-      await apiClient.delete(`/dashboard-preferences/${widgetId}/`);
-      setPreferences((prev) => prev.filter((w) => String(w.id) !== String(widgetId)));
-    } catch (error) {
-      console.error('Помилка видалення віджета:', error);
-      alert('Не вдалося видалити віджет. Спробуйте пізніше.');
-    }
+    deleteWidgetMutation.mutate(widgetId);
   };
 
-  const handleUpdateWidgetLayout = async (widgetId, layoutChanges) => {
+  const handleUpdateWidgetLayout = (widgetId, layoutChanges) => {
     const updatedList = preferences.map((w) =>
       String(w.id) === String(widgetId) ? { ...w, ...layoutChanges } : w
     );
-    setPreferences(updatedList);
-
-    try {
-      await apiClient.patch('/dashboard-preferences/', updatedList);
-    } catch (err) {
-      console.error('Не вдалося зберегти розмір віджета на сервері:', err);
-    }
+    savePreferencesMutation.mutate(updatedList);
   };
 
   const handleBaseHeightChange = (newHeight) => {
@@ -118,8 +133,7 @@ export default function DashboardPage() {
         delete copy.customHeight;
         return copy;
       });
-      setPreferences(cleaned);
-      apiClient.patch('/dashboard-preferences/', cleaned).catch(() => {});
+      savePreferencesMutation.mutate(cleaned);
     }
   };
 
@@ -146,7 +160,7 @@ export default function DashboardPage() {
     return 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))';
   };
 
-  if (!isPrefsLoaded) {
+  if (isPrefsLoading) {
     return <p style={{ textAlign: 'center', marginTop: '3rem' }}>Завантаження конфігурації дашборду...</p>;
   }
 

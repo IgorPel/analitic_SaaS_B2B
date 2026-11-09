@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import apiClient from '../../api/axios';
 import BasicChart from './BasicChart';
 import { resolveDateRange } from './dateRange';
@@ -10,6 +10,43 @@ const formatPeriod = (range) => {
     ? fmt(range.start_date)
     : `${fmt(range.start_date)} – ${fmt(range.end_date)}`;
 };
+
+const EMPTY_RESULT = { data: [], period: null };
+
+async function fetchWidgetData(endpoint, para, stores, signal) {
+  const range = await resolveDateRange(para, stores);
+  if (!range) return EMPTY_RESULT;
+
+  const params = new URLSearchParams();
+  params.append('start_date', range.start_date);
+  params.append('end_date', range.end_date);
+
+  stores.forEach((id) => params.append('stores_id', id));
+
+  if (para.group_and_limit) {
+    params.append('group_and_limit', JSON.stringify(para.group_and_limit));
+  }
+
+  if (para.fill_blank) {
+    const fillBlank = { ...para.fill_blank };
+    if (fillBlank.method === 'AtoZ' && fillBlank.data_type === 'date') {
+      fillBlank.start = range.start_date;
+      fillBlank.end = range.end_date;
+    }
+    params.append('fill_blank', JSON.stringify(fillBlank));
+  }
+
+  if (para.unique_dates) {
+    params.append('unique_dates', JSON.stringify(para.unique_dates));
+  }
+
+  if (para.graphs) {
+    params.append('graphs', JSON.stringify(para.graphs));
+  }
+
+  const response = await apiClient.get(endpoint, { params, signal });
+  return { data: response.data.data || response.data || [], period: range };
+}
 
 export default function DashboardWidget({
   widget,
@@ -34,77 +71,20 @@ export default function DashboardWidget({
     anal_func = 'Найпродавніші товари';
   }
 
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(Boolean(endpoint));
-  const [error, setError] = useState(null);
-  const [period, setPeriod] = useState(null);
-
   const isFullWidth = Boolean(widget.fullWidth);
   const effectiveHeight = widget.customHeight || baseHeight;
 
-  const requestKey = JSON.stringify({ para: widget.para || {}, stores: widget.stores || [] });
+  const para = widget.para || {};
+  const stores = widget.stores || [];
 
-  useEffect(() => {
-    if (!endpoint) return undefined;
-    let cancelled = false;
+  const { data: result = EMPTY_RESULT, isLoading: loading, isError } = useQuery({
+    queryKey: ['analytics', widget.func, stores, para],
+    queryFn: ({ signal }) => fetchWidgetData(endpoint, para, stores, signal),
+    enabled: Boolean(endpoint),
+  });
 
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { para, stores } = JSON.parse(requestKey);
-        const range = await resolveDateRange(para, stores);
-        if (cancelled) return;
-
-        if (!range) {
-          setPeriod(null);
-          setData([]);
-          return;
-        }
-        setPeriod(range);
-
-        const params = new URLSearchParams();
-        params.append('start_date', range.start_date);
-        params.append('end_date', range.end_date);
-
-        stores.forEach((id) => params.append('stores_id', id));
-
-        if (para.group_and_limit) {
-          params.append('group_and_limit', JSON.stringify(para.group_and_limit));
-        }
-
-        if (para.fill_blank) {
-          const fillBlank = { ...para.fill_blank };
-          if (fillBlank.method === 'AtoZ' && fillBlank.data_type === 'date') {
-            fillBlank.start = range.start_date;
-            fillBlank.end = range.end_date;
-          }
-          params.append('fill_blank', JSON.stringify(fillBlank));
-        }
-
-        if (para.unique_dates) {
-          params.append('unique_dates', JSON.stringify(para.unique_dates));
-        }
-
-        if (para.graphs) {
-          params.append('graphs', JSON.stringify(para.graphs));
-        }
-
-        const response = await apiClient.get(endpoint, { params });
-        if (!cancelled) setData(response.data.data || response.data || []);
-      } catch (err) {
-        console.error(err);
-        if (!cancelled) setError('Помилка завантаження даних');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    fetchData();
-    return () => {
-      cancelled = true;
-    };
-  }, [requestKey, endpoint]);
+  const { data, period } = result;
+  const error = isError ? 'Помилка завантаження даних' : null;
 
   const wrapperStyle = {
     gridColumn: isFullWidth ? '1 / -1' : 'span 1',

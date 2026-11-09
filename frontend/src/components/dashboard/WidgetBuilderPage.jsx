@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import apiClient from '../../api/axios';
 import BasicChart from './BasicChart';
 import { DATE_RANGE_OPTIONS } from './dateRange';
-import { useMemo } from 'react';
 
 const WIDGET_TEMPLATES = {
   revenue: {
@@ -201,7 +202,6 @@ export default function WidgetBuilderPage({ onSaveWidget }) {
   const [toFillConfig, setToFillConfig] = useState({});
 
   const template = WIDGET_TEMPLATES[metric];
-  const data = TEMPLATE_DATA[metric] || [];
 
   const remainingCols = Object.keys(template.cols).filter(
     (key) => key !== FillBlank_KEY && key !== FillBlank_UNIQUES
@@ -338,10 +338,24 @@ export default function WidgetBuilderPage({ onSaveWidget }) {
     }));
   };
 
-  const [isSaving, setIsSaving] = useState(false);
+  const queryClient = useQueryClient();
 
-  const handleSave = async () => {
-    setIsSaving(true);
+  const saveWidgetMutation = useMutation({
+    mutationFn: (widget) => apiClient.post('/dashboard-preferences/', widget).then((res) => res.data),
+    onSuccess: (_data, widget) => {
+      queryClient.invalidateQueries({ queryKey: ['dashboardPreferences'] });
+      if (onSaveWidget) onSaveWidget(widget);
+      navigate('/');
+    },
+    onError: (error) => {
+      console.error('Не вдалося зберегти віджет:', error);
+    },
+  });
+
+  const isSaving = saveWidgetMutation.isPending;
+
+  const handleSave = () => {
+    if (isSaving) return;
 
     const to_fill = {};
     remainingCols.forEach((colKey) => {
@@ -399,31 +413,7 @@ export default function WidgetBuilderPage({ onSaveWidget }) {
       }
     };
 
-    try {
-      const token = localStorage.getItem('access_token') || localStorage.getItem('token');
-
-      const response = await fetch('http://localhost:8000/api/dashboard-preferences/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` })
-        },
-        body: JSON.stringify(finalWidget)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Помилка збереження: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (onSaveWidget) onSaveWidget(finalWidget);
-      navigate('/');
-    } catch (error) {
-      console.error('Не вдалося зберегти віджет:', error);
-    } finally {
-      setIsSaving(false);
-    }
+    saveWidgetMutation.mutate(finalWidget);
   };
 
   const processedPreviewData = useMemo(() => {
@@ -645,7 +635,7 @@ export default function WidgetBuilderPage({ onSaveWidget }) {
               <strong style={{ fontSize: '0.9rem', color: '#475569' }}>Налаштування стовпчиків (per):</strong>
 
               {Object.entries(template.cols)
-                .filter(([key, col]) => col.type === 'number')
+                .filter(([, col]) => col.type === 'number')
                 .map(([colKey, col]) => {
                   const isEnabled = Boolean(barPerConfig[colKey]);
                   const conf = barPerConfig[colKey] || {};
@@ -753,7 +743,7 @@ export default function WidgetBuilderPage({ onSaveWidget }) {
                   <option value="No">-- Без поділу (Єдина лінія) --</option>
 
                   {Object.entries(template.cols)
-                    .filter(([key, col]) => col.type === 'string')
+                    .filter(([, col]) => col.type === 'string')
                     .map(([key, col]) => (
                       <option key={key} value={key}>
                         Розділити по: {col.name} ({key})
@@ -1104,6 +1094,7 @@ export default function WidgetBuilderPage({ onSaveWidget }) {
             <button
               type="button"
               onClick={handleSave}
+              disabled={isSaving}
               style={{
                 flex: 1,
                 padding: '0.75rem',
@@ -1111,11 +1102,12 @@ export default function WidgetBuilderPage({ onSaveWidget }) {
                 color: '#fff',
                 border: 'none',
                 borderRadius: '4px',
-                cursor: 'pointer',
+                cursor: isSaving ? 'wait' : 'pointer',
+                opacity: isSaving ? 0.7 : 1,
                 fontWeight: 'bold'
               }}
             >
-              Зберегти
+              {isSaving ? 'Збереження...' : 'Зберегти'}
             </button>
           </div>
         </div>

@@ -34,6 +34,10 @@ function shiftDays(date, days) {
   return copy;
 }
 
+export function clearDataRangeCache() {
+  dataRangeCache.clear();
+}
+
 export function fetchDataRange(stores = []) {
   const key = [...stores].sort().join(',');
   const cached = dataRangeCache.get(key);
