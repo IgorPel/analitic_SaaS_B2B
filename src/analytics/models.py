@@ -212,21 +212,55 @@ class PriceHistory(models.Model):
         verbose_name_plural = _('PriceHistory')
 
 
-class ImportIssue(TimeStampedModel):
-    company = models.ForeignKey(Company, related_name="import_issues", on_delete=models.CASCADE)
+class ImportTask(TimeStampedModel):
+    company = models.ForeignKey(Company, related_name="import_tasks", on_delete=models.CASCADE)
+    store = models.ForeignKey(Store, related_name="import_tasks", on_delete=models.CASCADE)
     task_id = models.CharField(max_length=255, db_index=True)
+    status = models.CharField(max_length=50)
+    total_rows = models.PositiveIntegerField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"[{self.status}] {self.company.name} - Task: {self.task_id}"
+
+    def __repr__(self):
+        return f"Task: [{self.task_id}] Company: [{self.company.name}]\nRow: {self.row_number}\n"
+
+
+    class Status(models.TextChoices):
+        PROCESSING = 'PR', _('Processing')
+        SUCCESS = 'SU', _("Success")
+        COMPLETED_WITH_WARNINGS = 'RT', _("Completed with Warnings")
+        FAILED = 'FA', _("Failed")
+
+    status = models.CharField(
+        max_length=2,
+        choices=Status.choices,
+        default=Status.PROCESSING
+    )
+
+
+    class Meta:
+        verbose_name = _('ImportTask')
+        verbose_name_plural = _('ImportTasks')
+
+
+
+class ImportIssue(TimeStampedModel):
+    task = models.ForeignKey(ImportTask, related_name="import_issues", on_delete=models.CASCADE)
     type = models.CharField(max_length=50)
     description = models.TextField()
     row_number = models.PositiveIntegerField(null=True, blank=True)
+    raw_data = models.JSONField(null=True, blank=True)
+
 
     def __str__(self):
-        return f"[{self.type}] {self.company.name} - Task: {self.task_id}"
+        return f"[{self.type}] {self.task.company.name} - Task: {self.task.task_id}"
 
     def __repr__(self):
-        return f"Task: [{self.task_id}] Company: [{self.company.name}]\nRow: {self.row_number}\nType: {self.type}\nDescription: {self.description}"
-
+        return f"Task: [{self.task.task_id}] Company: [{self.task.company.name}]\nRow: {self.row_number}\nType: {self.type}\nDescription: {self.description}\nRaw Data: {self.raw_data}\n"
 
     class Meta:
         verbose_name = _('ImportIssue')
         verbose_name_plural = _('ImportIssues')
+
 

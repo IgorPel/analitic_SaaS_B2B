@@ -194,4 +194,30 @@ class ImportIssueSerializer(serializers.ModelSerializer):
                 }
             })
 
+        return result
+
+
+class IssuesSerializer(serializers.Serializer):
+    tasks_id = serializers.ListField(child=serializers.UUIDField(), required=False)
+    issues = serializers.SerializerMethodField()
+
+    def get_issues(self, obj):
+        result = []
+        company = obj.companies.first()
+        if self.tasks_id:
+            issues = ImportIssue.objects.filter(company=company, task_id__in=self.tasks_id)
+        else:
+            issues = ImportIssue.objects.filter(company=company)
+
+        for issue in issues:
+            result.append({
+                issue.task_id: {
+                    'row_number': issue.row_number,
+                    'type': issue.type,
+                    'description': issue.description
+                }
+            })
+
+        return result
+
 

@@ -319,4 +319,18 @@ class TaskIssuesAPIView(APIView):
         serializer = ImportIssueSerializer(queryset, many=True)
         return Response(serializer.data)
 
+class IssueDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, issue_id):
+        company = request.user.companies.first()
+        try:
+            issue = ImportIssue.objects.get(id=issue_id, company=company)
+        except ImportIssue.DoesNotExist:
+            return Response({"error": "Issue not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ImportIssueSerializer(issue)
+        return Response(serializer.data)
+
+
 

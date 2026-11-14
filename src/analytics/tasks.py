@@ -4,7 +4,7 @@ from itertools import islice
 from celery import shared_task
 from click.core import batch
 
-from .models import Product, Category, Company, Store, Customer, Order, ImportIssue, OrderItem, PriceHistory
+from .models import ImportTask, Product, Category, Company, Store, Customer, Order, ImportIssue, OrderItem, PriceHistory
 import csv
 import os
 from django.utils.dateparse import parse_datetime
@@ -119,7 +119,6 @@ def process_warehouse_data(self, file_path, store_id, company_id):
         if os.path.exists(file_path):
             os.remove(file_path)
         return {
-
             "message": str(e)
         }
     finally:
@@ -163,11 +162,13 @@ def process_warehouse_data(self, file_path, store_id, company_id):
 
 class TaskSalesUpload():
 
-    def __init__(self, company, store, task_id):
+    def __init__(self, company, store, task_id, import_task):
         self.company = company
         self.store = store
         self.task_id = task_id
         self.issues_to_log = []
+        self.import_task = import_task
+
 
         self.uncategorized_category, _ = Category.objects.get_or_create(
                 name="Без категорії (Автоматично)",
@@ -186,8 +187,10 @@ class TaskSalesUpload():
         self.products_map = {p.sku: p for p in Product.objects.filter(store=self.store)}
 
 
-    def ImportIssues(self, ErrorType, context, row):
+    def ImportIssues(self, ErrorType, context, row_number, row):
+        
         description = None
+
         match ErrorType:
             case 'CUSTOMER_MISMATCH':
                 description = f'Order {context} have more than one customer email.'
@@ -202,10 +205,11 @@ class TaskSalesUpload():
         self.issues_to_log.append(
             ImportIssue(
                 company=self.company,
-                task_id=self.task_id,
+                task=self.import_task,
                 type=ErrorType,
                 description=description,
-                row_number=row
+                row_number=row_number,
+                raw_data=row
             )
         )
 
@@ -233,13 +237,13 @@ class TaskSalesUpload():
                 }
             else:
                 if row['customer_email'] != self.unique_orders_in_batch[order_id]['customer_email']:
-                    self.ImportIssues('CUSTOMER_MISMATCH', order_id, self.rows_processed + i + 1)
+                    self.ImportIssues('CUSTOMER_MISMATCH', order_id, self.rows_processed + i + 1, row)
 
                 if row['status'] != self.unique_orders_in_batch[order_id]['status']:
-                    self.ImportIssues('STATUS_MISMATCH', order_id, self.rows_processed + i + 1)
+                    self.ImportIssues('STATUS_MISMATCH', order_id, self.rows_processed + i + 1, row)
 
                 if row['order_date'] != str(self.unique_orders_in_batch[order_id]['date']):
-                    self.ImportIssues('DATE_MISMATCH', order_id, self.rows_processed + i + 1)
+                    self.ImportIssues('DATE_MISMATCH', order_id, self.rows_processed + i + 1, row)
 
 
                 self.total_cost_order[order_id] += item_total
@@ -280,8 +284,8 @@ class TaskSalesUpload():
                 )
             )
 
-            first_row = next(i for i, row in enumerate(self.batch) if row['product_sku'] == sku)  + 1 + self.rows_processed
-            self.ImportIssues('MISSING_SKU', sku, first_row)
+            first_row, row = next(((i + self.rows_processed + 2, row) for i, row in enumerate(self.batch) if row['product_sku'] == sku), (-1, None))
+            self.ImportIssues('MISSING_SKU', sku, first_row, row)
 
         if draft_products_to_create:
             Product.objects.bulk_create(draft_products_to_create)
@@ -338,16 +342,16 @@ class TaskSalesUpload():
 
 
                 if order_data['customer_email'] != self.orders_map[order_id].customer.email:
-                    row = next((i + self.rows_processed + 2 for i, row in enumerate(self.batch) if row['order_id'] == order_id and row['customer_email'] == order_data['customer_email']), -1)
-                    self.ImportIssues('CUSTOMER_MISMATCH', order_id, row)
+                    row_number, row = next(((i + self.rows_processed + 2, row) for i, row in enumerate(self.batch) if row['order_id'] == order_id and row['customer_email'] == order_data['customer_email']), (-1, None))
+                    self.ImportIssues('CUSTOMER_MISMATCH', order_id, row_number, row)
 
                 if self.Order_Status.get(order_data['status']) != self.orders_map[order_id].status:
-                    row = next((i + self.rows_processed + 2 for i, row in enumerate(self.batch) if row['order_id'] == order_id and row['status'] == order_data['status']), -1)
-                    self.ImportIssues('STATUS_MISMATCH', order_id, row)
+                    row_number, row = next(((i + self.rows_processed + 2, row) for i, row in enumerate(self.batch) if row['order_id'] == order_id and row['status'] == order_data['status']), (-1, None))
+                    self.ImportIssues('STATUS_MISMATCH', order_id, row_number, row)
 
                 if order_data['date'] != str(self.orders_map[order_id].order_date):
-                    row = next((i for i, row in enumerate(self.batch) if row['order_id'] == order_id and row['status'] == order_data['status']), -1) + self.rows_processed + 2
-                    self.ImportIssues('DATE_MISMATCH', order_id, row)
+                    row_number, row = next(((i + self.rows_processed + 2, row) for i, row in enumerate(self.batch) if row['order_id'] == order_id and row['status'] == order_data['status']), (-1, None))
+                    self.ImportIssues('DATE_MISMATCH', order_id, row_number, row)
 
 
                 existing_order.total_price += current_batch_sum
@@ -418,7 +422,12 @@ def process_sales_data(self, file_path, company_id, store_id):
     if not store:
         return {"status": "error", "message": "Store not found"}
 
-    smgads = TaskSalesUpload(company, store, self.request.id)
+    import_task = ImportTask.objects.create(
+        company=company,
+        task_id=self.request.id,
+    )
+
+    smgads = TaskSalesUpload(company, store, self.request.id, import_task)
 
 
     rows_processed = 0
@@ -430,7 +439,14 @@ def process_sales_data(self, file_path, company_id, store_id):
                row_count = sum(1 for _ in f) - 1
 
         if row_count <= 0:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            import_task.status = ImportTask.Status.FAILED
+            import_task.save()
             return {"status": "error", "message": "Файл порожній або містить лише заголовки"}
+
+        import_task.total_rows = row_count
+        import_task.save()
 
 
         with open(file_path, mode='r', encoding='utf-8') as file:
@@ -442,9 +458,7 @@ def process_sales_data(self, file_path, company_id, store_id):
                 if not batch:
                     break
 
-
                 res = smgads.process_batch(batch)
-
 
                 total_issues_found += res
 
@@ -469,10 +483,16 @@ def process_sales_data(self, file_path, company_id, store_id):
 
         if os.path.exists(file_path):
             os.remove(file_path)
+
+        import_task.status = ImportTask.Status.FAILED
+        import_task.save()
         return {"status": "error", "message": str(e)}
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
+
+    import_task.status = ImportTask.Status.SUCCESS if total_issues_found == 0 else ImportTask.Status.COMPLETED_WITH_WARNINGS
+    import_task.save()
     return {
         "status": "success",
         "processed_rows": rows_processed,
