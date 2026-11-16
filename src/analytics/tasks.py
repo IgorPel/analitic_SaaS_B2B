@@ -188,26 +188,11 @@ class TaskSalesUpload():
 
 
     def ImportIssues(self, ErrorType, context, row_number, row):
-        
-        description = None
-
-        match ErrorType:
-            case 'CUSTOMER_MISMATCH':
-                description = f'Order {context} have more than one customer email.'
-            case 'STATUS_MISMATCH':
-                description = f'Order {context} have different status.'
-            case 'DATE_MISMATCH':
-                description = f'Order {context} have different date.'
-            case 'MISSING_SKU':
-                description = f'SKU \'{context}\' created as draft.'
-
-
         self.issues_to_log.append(
             ImportIssue(
-                company=self.company,
                 task=self.import_task,
                 type=ErrorType,
-                description=description,
+                object_id=context,
                 row_number=row_number,
                 raw_data=row
             )
@@ -424,7 +409,9 @@ def process_sales_data(self, file_path, company_id, store_id):
 
     import_task = ImportTask.objects.create(
         company=company,
+        store=store,
         task_id=self.request.id,
+        file_name=os.path.basename(file_path),
     )
 
     smgads = TaskSalesUpload(company, store, self.request.id, import_task)

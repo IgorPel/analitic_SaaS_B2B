@@ -216,14 +216,15 @@ class ImportTask(TimeStampedModel):
     company = models.ForeignKey(Company, related_name="import_tasks", on_delete=models.CASCADE)
     store = models.ForeignKey(Store, related_name="import_tasks", on_delete=models.CASCADE)
     task_id = models.CharField(max_length=255, db_index=True)
-    status = models.CharField(max_length=50)
     total_rows = models.PositiveIntegerField(null=True, blank=True)
+    file_name = models.CharField(max_length=255, null=True, blank=True)
+
     
     def __str__(self):
-        return f"[{self.status}] {self.company.name} - Task: {self.task_id}"
+        return f"""[{self.status}] {self.company.name} - Task: {self.task_id}"""
 
     def __repr__(self):
-        return f"Task: [{self.task_id}] Company: [{self.company.name}]\nRow: {self.row_number}\n"
+        return f"Task: [{self.task_id}] Company: [{self.company.name}]\nRow: {self.total_rows}\n"
 
 
     class Status(models.TextChoices):
@@ -248,7 +249,7 @@ class ImportTask(TimeStampedModel):
 class ImportIssue(TimeStampedModel):
     task = models.ForeignKey(ImportTask, related_name="import_issues", on_delete=models.CASCADE)
     type = models.CharField(max_length=50)
-    description = models.TextField()
+    object_id = models.CharField(max_length=255, null=True, blank=True)
     row_number = models.PositiveIntegerField(null=True, blank=True)
     raw_data = models.JSONField(null=True, blank=True)
 
@@ -264,3 +265,17 @@ class ImportIssue(TimeStampedModel):
         verbose_name_plural = _('ImportIssues')
 
 
+    """
+            description = None
+
+        match ErrorType:
+            case 'CUSTOMER_MISMATCH':
+                description = f'Order {context} have more than one customer email.'
+            case 'STATUS_MISMATCH':
+                description = f'Order {context} have different status.'
+            case 'DATE_MISMATCH':
+                description = f'Order {context} have different date.'
+            case 'MISSING_SKU':
+                description = f'SKU \'{context}\' created as draft.'
+
+    """
