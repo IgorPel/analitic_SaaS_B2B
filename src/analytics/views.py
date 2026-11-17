@@ -10,7 +10,7 @@ import uuid
 import os
 from django.conf import settings
 from celery.result import AsyncResult
-from .serializers import FileUploadSerializer, AnalyticsSerializer, RegisterSerializer, UserProfileSerializer
+from .serializers import FileUploadSerializer, AnalyticsSerializer, IssuesSerializer, RegisterSerializer, ResolveIssueSerializer, UserProfileSerializer
 from .models import *
 from .analytic_func import *
 from django.core.cache import cache
@@ -104,7 +104,7 @@ class SalesDataUploadView(APIView):
                 for chunk in file_obj.chunks():
                     destination.write(chunk)
 
-            task = process_sales_data.delay(file_path, str(company.id), str(store.id))
+            task = process_sales_data.delay(file_path, str(company.id), str(store.id), origin_file_name=file_obj.name)
 
             return Response({
                 "message": "File uploaded successfully. Processing started.",
@@ -137,7 +137,7 @@ class StoreDataUploadView(APIView):
                 for chunk in file_obj.chunks():
                     destination.write(chunk)
 
-            task = process_warehouse_data.delay(file_path, str(store.id), str(company.id))
+            task = process_warehouse_data.delay(file_path, str(store.id), str(company.id), origin_file_name=file_obj.name)
 
             return Response({
                 "message": "File uploaded successfully. Processing started.",
@@ -304,20 +304,17 @@ class UserProfileAPIView(APIView):
 
 
 class TaskIssuesAPIView(APIView):
-
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        company = request.user.companies.first()
-
         tasks_id = request.query_params.getlist('tasks_id')
-        queryset = ImportIssue.objects.filter(company=company)
+        serializer = IssuesSerializer(
+            request.user,
+            data={'tasks_id': tasks_id} if tasks_id else {}
+        )
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data['issues'])
 
-        if tasks_id:
-            queryset = queryset.filter(task_id__in=tasks_id)
-
-        serializer = ImportIssueSerializer(queryset, many=True)
-        return Response(serializer.data)
 
 class IssueDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -334,3 +331,13 @@ class IssueDetailAPIView(APIView):
 
 
 
+class IssueResolveAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        company = request.user.companies.first()
+        serializer = ResolveIssueSerializer(data=request.data, context={'company': company})
+        if serializer.is_valid():
+            result = serializer.save()
+            return Response(result, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

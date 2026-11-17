@@ -397,7 +397,7 @@ class TaskSalesUpload():
 
 
 @shared_task(bind=True)
-def process_sales_data(self, file_path, company_id, store_id):
+def process_sales_data(self, file_path, company_id, store_id, origin_file_name=None):
 
     company = Company.objects.filter(id=company_id).first()
     if not company:
@@ -411,7 +411,7 @@ def process_sales_data(self, file_path, company_id, store_id):
         company=company,
         store=store,
         task_id=self.request.id,
-        file_name=os.path.basename(file_path),
+        file_name=origin_file_name or os.path.basename(file_path),
     )
 
     smgads = TaskSalesUpload(company, store, self.request.id, import_task)

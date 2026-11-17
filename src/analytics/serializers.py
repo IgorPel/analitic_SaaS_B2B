@@ -4,7 +4,7 @@ from functools import cache
 
 from django.utils import timezone
 import os
-from .models import Category, ImportTask, Store, Order, Product, Company, ImportIssue
+from .models import Category, Customer, ImportTask, Store, Order, Product, Company, ImportIssue
 from django.db import transaction
 
 from rest_framework import serializers
@@ -206,7 +206,7 @@ class IssuesSerializer(serializers.Serializer):
     issues = serializers.SerializerMethodField()
 
     def get_issues(self, obj):
-        result = []
+        
         company = obj.companies.first()
         issues = ImportIssue.objects.filter(task__company=company)
         issues = issues.filter(task__id__in=self.tasks_id) if self.tasks_id else issues
@@ -217,6 +217,7 @@ class IssuesSerializer(serializers.Serializer):
             'row_number',
             'raw_data',
             'task__file_name',
+            'task__store_id'
         )
 
         unique_orders = set()
@@ -296,21 +297,21 @@ class ProductSerializer(serializers.Serializer):
     id = serializers.UUIDField(required=False)
     name = serializers.CharField(max_length=100, required=False)
     sku = serializers.CharField(max_length=100, required=False)
-    category = serializers.ListField(child=serializers.CharField(), required=False)
+    category = serializers.ListField(child=serializers.IntegerField(), required=False)
     store = serializers.UUIDField(required=False)
     current_price = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, required=False)
 
 
 class ResolveIssueSerializer(serializers.Serializer):
     # allow_empty=False автоматично замінює ручну перевірку `if not value:`
-    issue_ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=False, required=True)
+    issue_ids = serializers.ListField(child=serializers.IntegerField(), allow_empty=False, required=True)
     entity_type = serializers.ChoiceField(choices=['ORDER', 'PRODUCT'], required=True)
     object_id = serializers.CharField(max_length=255, required=True)
     resolved_data = serializers.DictField(required=False, default=dict)
     store_id = serializers.UUIDField(required=True)
 
     def validate(self, data):
-        company = self.context['request'].user.companies.first()
+        company = self.context['company']
         entity_type = data['entity_type']
         object_id = data['object_id']
         store_id = data['store_id']
@@ -349,7 +350,7 @@ class ResolveIssueSerializer(serializers.Serializer):
 
     def save(self):
 
-        company = self.context['request'].user.companies.first()
+        company = self.context['company']
         entity_type = self.validated_data['entity_type']
         object_id = self.validated_data['object_id']
         store_id = self.validated_data['store_id']
@@ -365,7 +366,7 @@ class ResolveIssueSerializer(serializers.Serializer):
                 order = Order.objects.select_for_update().get(store_id=store_id, store__company=company, order_id=object_id)
 
                 if 'customer' in resolved_data:
-                    customer, _ = User.objects.get_or_create(company=company, email=resolved_data['customer'])
+                    customer, _ = Customer.objects.get_or_create(company=company, email=resolved_data['customer'])
                     order.customer = customer
                 if 'order_date' in resolved_data:
                     order.order_date = resolved_data['order_date']
@@ -383,12 +384,16 @@ class ResolveIssueSerializer(serializers.Serializer):
                 product.save()
 
                 if 'category_ids' in resolved_data:
-                    categories = Category.objects.filter(store_id=store_id, id__in=resolved_data['category_ids'])
+                    categories = Category.objects.filter(company=company, id__in=resolved_data['category_ids'])
                     product.category.set(categories)
 
             # Перевіряємо, чи закрилися всі помилки у відповідних ImportTask
-            deleted_count, _ = issue_ids.delete()
+            affected_task_ids = list(issues_qs.values_list('task_id', flat=True).distinct())
+            deleted_count, _ = issues_qs.delete()
 
+            for t_id in affected_task_ids:
+                if not ImportIssue.objects.filter(task_id=t_id).exists():
+                    ImportTask.objects.filter(id=t_id).update(status=ImportTask.Status.SUCCESS)
             
         cache.clear()
         return {

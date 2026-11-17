@@ -258,7 +258,17 @@ class ImportIssue(TimeStampedModel):
         return f"[{self.type}] {self.task.company.name} - Task: {self.task.task_id}"
 
     def __repr__(self):
-        return f"Task: [{self.task.task_id}] Company: [{self.task.company.name}]\nRow: {self.row_number}\nType: {self.type}\nDescription: {self.description}\nRaw Data: {self.raw_data}\n"
+        match self.type:
+            case 'CUSTOMER_MISMATCH':
+                description = f'Order {self.object_id} have more than one customer email.'
+            case 'STATUS_MISMATCH':
+                description = f'Order {self.object_id} have different status.'
+            case 'DATE_MISMATCH':
+                description = f'Order {self.object_id} have different date.'
+            case 'MISSING_SKU':
+                description = f'SKU \'{self.object_id}\' created as draft.'
+
+        return f"Task: [{self.task.task_id}] Company: [{self.task.company.name}]\nRow: {self.row_number}\nType: {self.type}\nDescription: {description}\nRaw Data: {self.raw_data}\n"
 
     class Meta:
         verbose_name = _('ImportIssue')
